@@ -1,0 +1,171 @@
+{% extends "authenticated-base.html" %}
+{% block title %}Prizes | Student Awards{% endblock %}
+
+{% block subpage_content %}
+<main class="prizes-page" data-role="{{ 'admin' if user.role == 'admin' else 'student' }}">
+  {% if user.role == "admin" %}
+  <header class="prizes-heading">
+    <h1>Prize redemptions</h1>
+    <p>Confirm student prize requests.</p>
+  </header>
+  {% else %}
+  <header class="prizes-heading">
+    <h1>PRIZES</h1>
+    <div class="prize-balance">
+      Your Points: <span id="pointsBalance">{{ points_balance }}</span>
+      ({{ "%.0f"|format(approved_hours) }} hours)
+    </div>
+  </header>
+
+  <section class="prize-list" aria-label="Available prizes">
+    {% for prize in prizes %}
+    <article class="prize-card" data-prize-id="{{ prize.id }}" data-prize-cost="{{ prize.cost }}">
+      <div class="prize-details">
+        <h2>{{ prize.name }}</h2>
+        <p>Cost: {{ prize.cost }} points</p>
+      </div>
+      <button class="btn btn-success prize-redeem" type="button" data-redeem
+              {% if points_balance < prize.cost %}disabled aria-disabled="true"{% endif %}>
+        Redeem
+      </button>
+    </article>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <section class="redemption-section" aria-labelledby="redemption-heading">
+    <h2 id="redemption-heading">Redemption History</h2>
+    {% if redemption_history %}
+    <ul class="redemption-history" id="redemptionHistory">
+      {% for redemption, prize, student in redemption_history %}
+      <li class="redemption-row" data-redemption-id="{{ redemption.id }}">
+        <div class="redemption-info">
+          <span class="redemption-prize">{{ prize.name }}</span>
+          {% if user.role == "admin" %}<span class="redemption-student">{{ student.username }}</span>{% endif %}
+        </div>
+        <span class="redemption-status-badge status-{{ redemption.status }} {{ 'is-indicator' if user.role == 'admin' }}"
+              data-status-badge role="status" aria-label="Status: {{ redemption.status | title }}"
+              title="{{ redemption.status | title }}">
+          {% if user.role != "admin" %}{{ redemption.status | title }}{% endif %}
+        </span>
+        {% if user.role == "admin" %}
+        <label class="visually-hidden" for="redemption-status-{{ redemption.id }}">Redemption status</label>
+        <select class="form-select redemption-status-select" id="redemption-status-{{ redemption.id }}"
+          data-redemption-status data-current-status="{{ redemption.status }}">
+          <option value="pending" {{ 'selected' if redemption.status == 'pending' }}>Pending</option>
+          <option value="processing" {{ 'selected' if redemption.status == 'processing' }}>Processing</option>
+          <option value="shipping" {{ 'selected' if redemption.status == 'shipping' }}>Shipping</option>
+          <option value="delivered" {{ 'selected' if redemption.status == 'delivered' }}>Delivered</option>
+        </select>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty-queue" id="redemptionEmpty">No redemptions yet.</div>
+    <ul class="redemption-history d-none" id="redemptionHistory"></ul>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}
+
+{% block subpage_scripts %}
+<script>
+  const prizePage = document.querySelector(".prizes-page");
+  const toastElement = document.getElementById("appToast");
+  let toastTimer = null;
+
+  function showPrizeToast(title, message) {
+    if (!toastElement) return;
+    const toastTitle = document.getElementById("toastTitle");
+    const toastContent = document.getElementById("toastContent");
+    if (toastTitle) toastTitle.textContent = title;
+    if (toastContent) toastContent.textContent = message;
+    toastElement.classList.add("toast-visible");
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => toastElement.classList.remove("toast-visible"), 4500);
+  }
+
+  const toastClose = document.getElementById("toastClose");
+  if (toastClose) {
+    toastClose.addEventListener("click", () => {
+      window.clearTimeout(toastTimer);
+      toastElement?.classList.remove("toast-visible");
+    });
+  }
+
+  async function readPrizeResponse(response) {
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || "The request could not be completed.");
+    return payload;
+  }
+
+  const redemptionHistory = document.getElementById("redemptionHistory");
+  const redemptionEmpty = document.getElementById("redemptionEmpty");
+  if (prizePage.dataset.role === "student") {
+    document.querySelectorAll("[data-redeem]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const card = button.closest("[data-prize-id]");
+        button.disabled = true;
+        try {
+          const result = await readPrizeResponse(await fetch(
+            `/api/prizes/${card.dataset.prizeId}/redeem`,
+            { method: "POST" },
+          ));
+          document.getElementById("pointsBalance").textContent = String(result.points_balance);
+          document.querySelectorAll("[data-prize-cost]").forEach((prizeCard) => {
+            const redeemButton = prizeCard.querySelector("[data-redeem]");
+            redeemButton.disabled = Number(prizeCard.dataset.prizeCost) > result.points_balance;
+            redeemButton.setAttribute("aria-disabled", String(redeemButton.disabled));
+          });
+
+          const row = document.createElement("li");
+          row.className = "redemption-row";
+          row.dataset.redemptionId = result.id;
+          row.innerHTML = `<div class="redemption-info"><span class="redemption-prize"></span></div><span class="redemption-status-badge status-pending" data-status-badge role="status" aria-label="Status: Pending" title="Pending">Pending</span>`;
+          row.querySelector(".redemption-prize").textContent = result.prize_name;
+          redemptionHistory.append(row);
+          redemptionHistory.classList.remove("d-none");
+          redemptionEmpty?.classList.add("d-none");
+          showPrizeToast(`${result.prize_name} redeemed`, `You have ${result.points_balance} points remaining.`);
+        } catch (error) {
+          button.disabled = false;
+          showPrizeToast("Redemption failed", error.message);
+        }
+      });
+    });
+  }
+
+  if (prizePage.dataset.role === "admin" && redemptionHistory) {
+    redemptionHistory.addEventListener("change", async (event) => {
+      const select = event.target.closest("[data-redemption-status]");
+      if (!select) return;
+      const row = select.closest("[data-redemption-id]");
+      const previousStatus = select.dataset.currentStatus;
+      select.disabled = true;
+      try {
+        const result = await readPrizeResponse(await fetch(
+          `/api/redemptions/${row.dataset.redemptionId}/status`,
+          {
+            method: "POST",
+            body: new URLSearchParams({ status: select.value }),
+          },
+        ));
+        select.dataset.currentStatus = result.status;
+        const statusBadge = row.querySelector("[data-status-badge]");
+        const statusLabel = select.options[select.selectedIndex].textContent;
+        statusBadge.classList.remove("status-pending", "status-processing", "status-shipping", "status-delivered");
+        statusBadge.classList.add(`status-${result.status}`);
+        statusBadge.title = statusLabel;
+        statusBadge.setAttribute("aria-label", `Status: ${statusLabel}`);
+        showPrizeToast("Redemption updated", `Status changed to ${statusLabel}.`);
+      } catch (error) {
+        select.value = previousStatus;
+        showPrizeToast("Status update failed", error.message);
+      } finally {
+        select.disabled = false;
+      }
+    });
+  }
+</script>
+{% endblock %}

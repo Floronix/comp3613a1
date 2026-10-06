@@ -4,7 +4,8 @@
 <style>
     body {
         overflow-x: hidden;
-        background: #f4f6f8;
+        background: var(--brand-bg);
+        color: var(--brand-ink);
     }
 
     #wrapper {
@@ -33,8 +34,8 @@
     #sidebar .nav-link:hover,
     #sidebar .nav-link.active {
         color: #fff;
-        background-color: color-mix(in srgb, var(--brand-accent) 55%, #000);
-        border-radius: 0.5rem;
+        background-color: color-mix(in srgb, var(--brand-accent) 22%, var(--brand-sidebar));
+        border-radius: var(--brand-radius);
     }
 
     #sidebar .brand-wordmark {
@@ -50,11 +51,13 @@
         transition: all 0.3s;
         display: flex;
         flex-direction: column;
-        background-color: #f4f6f8;
+        background-color: var(--brand-bg);
+        color: var(--brand-ink);
     }
 
     .navbar {
-        border-bottom: 1px solid #dee2e6;
+        border-bottom: 1px solid #343b36;
+        background-color: var(--brand-surface) !important;
     }
 </style>
 {% block additional_styles %}{% endblock %}
@@ -63,29 +66,58 @@
 {% block content %}
 <div id="wrapper">
     <nav id="sidebar" class="p-3 d-flex flex-column vh-100">
-        <div class="brand-wordmark">FastStarter</div>
+        <a class="brand-wordmark sidebar-brand" href="{{ url_for('index_view') }}">Student Awards</a>
 
         <ul class="nav nav-pills flex-column gap-2 flex-grow-1">
+            {% if user.role == "admin" %}
             <li class="nav-item">
-                <a class="nav-link d-flex align-items-center {{ 'active' if request.url.path.startswith('/app') }}"
-                   href="{{ url_for('user_home_view') }}">
-                    <span class="material-symbols-outlined me-2">home</span>
-                    Home
+                <a class="nav-link {{ 'active' if request.url.path.startswith('/admin') }}" href="{{ url_for('admin_home_view') }}">
+                    Review queue
                 </a>
             </li>
-            <li class="nav-item mt-auto">
-                <a class="nav-link d-flex align-items-center text-danger" href="{{ url_for('logout') }}">
-                    <span class="material-symbols-outlined me-2">logout</span>
-                    Logout
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if request.url.path.startswith('/prizes') }}" href="{{ url_for('prizes_view') }}">
+                    Prize redemptions
                 </a>
+            </li>
+            {% else %}
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if request.url.path == '/app' }}" href="{{ url_for('user_home_view') }}">
+                    Volunteer hours
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if request.url.path.startswith('/my-activities') }}" href="{{ url_for('my_activities_view') }}">
+                    My Activities
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if request.url.path.startswith('/leaderboard') }}" href="{{ url_for('leaderboard_view') }}">
+                    Leaderboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if request.url.path.startswith('/prizes') }}" href="{{ url_for('prizes_view') }}">
+                    Prizes
+                </a>
+            </li>
+            {% endif %}
+            <li class="nav-item mt-auto">
+                <a class="nav-link" href="{{ url_for('index_view') }}">
+                    <span class="material-symbols-outlined me-2" aria-hidden="true">home</span>
+                    Landing page
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-danger" href="{{ url_for('logout') }}">Sign out</a>
             </li>
         </ul>
     </nav>
 
     <div id="content">
         <nav class="navbar navbar-expand-lg bg-white mb-4 px-3 rounded-3 shadow-sm">
-            <button class="btn btn-outline-secondary" id="menu-toggle" type="button">
-                <span class="material-symbols-outlined md-dark">menu</span>
+            <button class="btn btn-outline-secondary menu-toggle" id="menu-toggle" type="button" aria-label="Toggle sidebar" title="Toggle sidebar">
+                <span class="material-symbols-outlined" aria-hidden="true">menu</span>
             </button>
             <div class="ms-auto d-flex align-items-center gap-3">
                 <span class="fw-semibold">Welcome, {{ user.username }}</span>

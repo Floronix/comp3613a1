@@ -1,0 +1,28 @@
+{
+  "system": "Student Awards",
+  "actors": [
+    {"name": "Student", "side": "left"},
+    {"name": "Admin", "side": "right"}
+  ],
+  "use_cases": [
+    {"name": "Log Volunteer Hours", "actors": ["Student"]},
+    {
+      "name": "Review Volunteer Submission",
+      "actors": ["Admin"],
+      "includes": ["Check Milestone Threshold"]
+    },
+    {"name": "Check Milestone Threshold"},
+    {
+      "name": "Unlock Milestone",
+      "extends": ["Check Milestone Threshold"]
+    },
+    {"name": "View Leaderboard", "actors": ["Student"]},
+    {"name": "Browse Prizes", "actors": ["Student"]},
+    {
+      "name": "Redeem Prize",
+      "actors": ["Student"],
+      "includes": ["Confirm Redemption"]
+    },
+    {"name": "Confirm Redemption", "actors": ["Admin"]}
+  ]
+}

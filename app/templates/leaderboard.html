@@ -1,0 +1,162 @@
+{% extends "authenticated-base.html" %}
+{% block title %}Leaderboard | Student Awards{% endblock %}
+
+{% block subpage_content %}
+<main class="leaderboard-page">
+  <section class="leaderboard-frame" aria-labelledby="leaderboard-heading">
+    <h1 class="leaderboard-title" id="leaderboard-heading">Leaderboards</h1>
+    <ol class="leaderboard-list" aria-label="Top students by approved volunteer hours">
+      {% for student in top_students %}
+      <li class="leaderboard-row {{ 'is-current' if student.id == user.id else '' }}">
+        <span>{{ student.rank }}.</span>
+        <span class="leaderboard-name">{{ student.username }}</span>
+        <span class="leaderboard-dots" aria-hidden="true"></span>
+        <span class="leaderboard-hours">{{ "%.0f"|format(student.approved_hours) }}</span>
+      </li>
+      {% endfor %}
+      {% if current_student %}
+      <li class="leaderboard-row leaderboard-current-rank is-current">
+        <span>{{ current_student.rank }}.</span>
+        <span class="leaderboard-name">{{ current_student.username }}</span>
+        <span class="leaderboard-dots" aria-hidden="true"></span>
+        <span class="leaderboard-hours">{{ "%.0f"|format(current_student.approved_hours) }}</span>
+      </li>
+      {% endif %}
+    </ol>
+
+    <section class="milestone-panel" aria-labelledby="milestones-heading">
+      <h2 id="milestones-heading">Milestones</h2>
+      <div class="milestone-scroll" id="milestoneScroll" data-start-index="{{ milestone_start_index }}" aria-label="Milestone carousel">
+        <div class="milestone-grid" id="milestoneGrid">
+        {% for milestone in milestones %}
+        <div class="milestone-item" title="{{ milestone.name }}: {{ milestone.reward }} points">
+          <span class="milestone-badge">
+            <span class="material-symbols-outlined" aria-hidden="true">{{ milestone.badge_icon }}</span>
+            {% if milestone.unlocked %}<span class="material-symbols-outlined milestone-check" aria-label="Claimed">check</span>{% endif %}
+          </span>
+          <span>{{ milestone.threshold }}</span>
+        </div>
+        {% endfor %}
+        </div>
+      </div>
+      <div class="milestone-toolbar">
+        <button class="milestone-step" id="milestonePrevious" type="button" aria-label="Previous milestones" title="Previous milestones">
+          <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+        </button>
+        <button class="milestone-return" id="milestoneReturn" type="button" aria-label="Return to current milestones" title="Return to current milestones" hidden>
+          <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
+        </button>
+        <button class="milestone-step" id="milestoneNext" type="button" aria-label="Next milestones" title="Next milestones">
+          <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+        </button>
+      </div>
+      <div class="milestone-progress" role="progressbar" aria-label="Progress to next milestone"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ progress_percent }}">
+        <span style="width: {{ progress_percent }}%"></span>
+      </div>
+      <p class="milestone-progress-label">
+        {{ "%.0f"|format(approved_hours) }}/{{ next_milestone if next_milestone else 100 }}
+      </p>
+    </section>
+  </section>
+</main>
+{% endblock %}
+
+{% block subpage_scripts %}
+<script>
+  const milestoneScroll = document.getElementById("milestoneScroll");
+  const milestoneGrid = document.getElementById("milestoneGrid");
+  const milestoneReturn = document.getElementById("milestoneReturn");
+  const milestonePrevious = document.getElementById("milestonePrevious");
+  const milestoneNext = document.getElementById("milestoneNext");
+  if (milestoneScroll && milestoneGrid && milestoneReturn && milestonePrevious && milestoneNext) {
+    const startingIndex = Number(milestoneScroll.dataset.startIndex || 0);
+    const milestoneItems = milestoneGrid.querySelectorAll(".milestone-item");
+    let currentIndex = startingIndex;
+    let itemStep = 0;
+    let dragOffset = 0;
+    let pointerStartX = 0;
+    let dragStartIndex = 0;
+    let isDragging = false;
+
+    const maxIndex = () => Math.max(0, milestoneItems.length - 3);
+    const clampIndex = (index) => Math.max(0, Math.min(maxIndex(), index));
+    const updateControls = (offset = -currentIndex * itemStep) => {
+      milestonePrevious.disabled = currentIndex <= 0;
+      milestoneNext.disabled = currentIndex >= maxIndex();
+      milestoneReturn.hidden = Math.abs(offset + startingIndex * itemStep) < 4;
+    };
+    const positionTrack = (index, animate = true) => {
+      currentIndex = clampIndex(index);
+      milestoneGrid.classList.toggle("is-dragging", !animate);
+      dragOffset = -currentIndex * itemStep;
+      milestoneGrid.style.transform = `translate3d(${dragOffset}px, 0, 0)`;
+      updateControls();
+    };
+
+    const positionCurrentMilestones = () => {
+      const gap = Number.parseFloat(getComputedStyle(milestoneGrid).gap || "0");
+      const itemWidth = Math.max(48, (milestoneScroll.clientWidth - gap * 2) / 3);
+      milestoneGrid.style.setProperty("--milestone-item-width", `${itemWidth}px`);
+      itemStep = itemWidth + gap;
+      positionTrack(currentIndex);
+    };
+
+    requestAnimationFrame(positionCurrentMilestones);
+    new ResizeObserver(() => requestAnimationFrame(positionCurrentMilestones)).observe(milestoneScroll);
+    milestoneScroll.addEventListener("pointerdown", (event) => {
+      if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
+      isDragging = true;
+      pointerStartX = event.clientX;
+      dragStartIndex = currentIndex;
+      dragOffset = -currentIndex * itemStep;
+      milestoneScroll.classList.add("is-dragging");
+      milestoneGrid.classList.add("is-dragging");
+      milestoneScroll.setPointerCapture(event.pointerId);
+    });
+    milestoneScroll.addEventListener("pointermove", (event) => {
+      if (!isDragging) return;
+      const requestedOffset = -dragStartIndex * itemStep + event.clientX - pointerStartX;
+      dragOffset = Math.max(-maxIndex() * itemStep, Math.min(0, requestedOffset));
+      milestoneGrid.style.transform = `translate3d(${dragOffset}px, 0, 0)`;
+      updateControls(dragOffset);
+    });
+    const finishDragging = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      milestoneScroll.classList.remove("is-dragging");
+      positionTrack(Math.round(-dragOffset / itemStep));
+    };
+    milestoneScroll.addEventListener("pointerup", finishDragging);
+    milestoneScroll.addEventListener("pointercancel", finishDragging);
+    milestonePrevious.addEventListener("click", () => positionTrack(currentIndex - 1));
+    milestoneNext.addEventListener("click", () => positionTrack(currentIndex + 1));
+    milestoneReturn.addEventListener("click", () => positionTrack(startingIndex));
+  }
+
+  const leaderboardAwards = {{ new_awards | tojson }};
+  const leaderboardToast = document.getElementById("appToast");
+  const leaderboardToastClose = document.getElementById("toastClose");
+  if (leaderboardToastClose) {
+    leaderboardToastClose.addEventListener("click", () => {
+      window.clearTimeout(window.leaderboardToastTimer);
+      leaderboardToast?.classList.remove("toast-visible");
+    });
+  }
+  leaderboardAwards.forEach((award, index) => {
+    window.setTimeout(() => {
+      const toast = leaderboardToast;
+      const title = document.getElementById("toastTitle");
+      const message = document.getElementById("toastContent");
+      if (!toast || !title || !message) return;
+      title.textContent = `Milestone (${award.threshold}) claimed successfully!`;
+      message.textContent = `You have obtained ${award.points} points.`;
+      toast.classList.add("toast-visible");
+      window.clearTimeout(window.leaderboardToastTimer);
+      window.leaderboardToastTimer = window.setTimeout(() => {
+        toast.classList.remove("toast-visible");
+      }, 4500);
+    }, index * 4800);
+  });
+</script>
+{% endblock %}

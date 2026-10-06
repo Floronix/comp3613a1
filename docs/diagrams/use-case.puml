@@ -1,0 +1,38 @@
+@startuml
+!pragma layout smetana
+skinparam shadowing false
+skinparam actorBorderColor #1B365D
+skinparam actorFontColor #1E232D
+skinparam usecaseBackgroundColor #FFFFFF
+skinparam usecaseBorderColor #1B365D
+skinparam usecaseFontColor #1E232D
+skinparam rectangleBorderColor #1B365D
+skinparam rectangleBackgroundColor #F8FAFC
+skinparam arrowColor #1B365D
+
+actor "Student" as Student
+
+rectangle "Student Awards" {
+  usecase "Log Volunteer Hours" as Log_Volunteer_Hours
+  usecase "Review Volunteer Submission" as Review_Volunteer_Submission
+  usecase "Check Milestone Threshold" as Check_Milestone_Threshold
+  usecase "Unlock Milestone" as Unlock_Milestone
+  usecase "View Leaderboard" as View_Leaderboard
+  usecase "Browse Prizes" as Browse_Prizes
+  usecase "Redeem Prize" as Redeem_Prize
+  usecase "Confirm Redemption" as Confirm_Redemption
+}
+
+actor "Admin" as Admin
+
+Student --> Log_Volunteer_Hours
+Review_Volunteer_Submission <-- Admin
+Review_Volunteer_Submission ..> Check_Milestone_Threshold : <<include>>
+Unlock_Milestone ..> Check_Milestone_Threshold : <<extend>>
+Student --> View_Leaderboard
+Student --> Browse_Prizes
+Student --> Redeem_Prize
+Redeem_Prize ..> Confirm_Redemption : <<include>>
+Confirm_Redemption <-- Admin
+
+@enduml

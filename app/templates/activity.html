@@ -1,0 +1,257 @@
+{% extends "authenticated-base.html" %}
+{% block title %}Volunteer hours | Student Awards{% endblock %}
+
+{% block subpage_content %}
+<main class="activity-page" data-role="{{ 'admin' if user.role == 'admin' else 'student' }}">
+  {% if user.role == "admin" %}
+  <header class="activity-heading">
+    <div>
+      <h1>Volunteer activity</h1>
+      <p>Review submitted hours</p>
+    </div>
+    <span class="hours-total"><span id="pendingCount">{{ pending_submissions | length }}</span> pending</span>
+  </header>
+
+  <section class="activity-panel" aria-labelledby="review-heading">
+    <h2 id="review-heading">Admin review queue</h2>
+    <div class="empty-queue {{ 'd-none' if pending_submissions }}" id="emptyQueue">No volunteer activities are waiting for review.</div>
+    <div class="submission-list {{ 'd-none' if not pending_submissions }}" id="submissionList">
+      {% for submission, student in pending_submissions %}
+      <article class="submission-row" data-submission-id="{{ submission.id }}">
+        <div>
+          <h3>{{ submission.activity }}</h3>
+          <p class="submission-meta">{{ student.username if student else "Student" }} · {{ "%.1f"|format(submission.hours) }} hours · {{ submission.submitted_at.strftime("%b %d, %Y") }}</p>
+          <p class="submission-description">{{ submission.description }}</p>
+        </div>
+        <div class="submission-actions">
+          <button class="btn btn-success btn-sm" type="button" data-review="approved">Approve</button>
+          <button class="btn btn-danger btn-sm" type="button" data-review="rejected">Reject</button>
+        </div>
+        <span class="submission-status" aria-live="polite">Pending review</span>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% elif view == "activities" %}
+  <header class="activity-heading">
+    <div>
+      <h1>My Activities</h1>
+      <p>Your volunteer-hour submissions and their current status.</p>
+    </div>
+  </header>
+  <div class="activity-filter-bar" role="group" aria-label="Filter activities">
+    <button class="activity-filter is-active" type="button" data-filter="all" aria-pressed="true">All</button>
+    <button class="activity-filter" type="button" data-filter="pending" aria-pressed="false">Pending</button>
+    <button class="activity-filter" type="button" data-filter="accepted" aria-pressed="false">Accepted</button>
+    <button class="activity-filter" type="button" data-filter="removed" aria-pressed="false">Removed</button>
+  </div>
+  <section class="activity-panel" aria-label="My submitted activities">
+    <div class="submission-list" id="myActivitiesList">
+      {% for submission in my_submissions %}
+      <article class="submission-row" data-activity-status="{{ 'accepted' if submission.status == 'approved' else 'removed' if submission.status in ['removed', 'rejected'] else 'pending' }}">
+        <div>
+          <h3>{{ submission.activity }}</h3>
+          <p class="submission-meta">{{ "%.1f"|format(submission.hours) }} hours · {{ submission.submitted_at.strftime("%b %d, %Y") }}</p>
+          <p class="submission-description">{{ submission.description }}</p>
+        </div>
+        <span class="activity-state state-{{ submission.status }}">
+          {% if submission.status == "approved" %}Accepted{% elif submission.status in ["removed", "rejected"] %}Removed{% else %}Pending{% endif %}
+        </span>
+      </article>
+      {% endfor %}
+    </div>
+    <div class="empty-queue {{ 'd-none' if my_submissions }}" id="activityFilterEmpty">No activities submitted yet.</div>
+  </section>
+  {% else %}
+  <header class="activity-heading">
+    <div>
+      <h1>Log volunteer hours</h1>
+      <p>Submit a volunteer activity for admin review.</p>
+    </div>
+    <span class="hours-total">Approved total: {{ "%.1f"|format(approved_hours) }} hours</span>
+  </header>
+
+  <section class="activity-panel" aria-labelledby="submission-heading">
+    <h2 id="submission-heading">Student submission</h2>
+    <form id="volunteerForm">
+      <div class="activity-form-grid">
+        <div>
+          <label class="form-label" for="activity">Activity</label>
+          <input class="form-control" id="activity" name="activity" type="text" required maxlength="120">
+        </div>
+        <div>
+          <label class="form-label" for="hours">Hours</label>
+          <input class="form-control" id="hours" name="hours" type="text" inputmode="numeric" pattern="[0-9]+" autocomplete="off" required>
+        </div>
+        <div class="description-field">
+          <label class="form-label" for="description">Description</label>
+          <textarea class="form-control" id="description" name="description" required></textarea>
+        </div>
+      </div>
+      <div class="activity-actions">
+        <button class="btn btn-danger" type="reset">Clear</button>
+        <button class="btn btn-success" type="submit">Submit</button>
+      </div>
+    </form>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}
+
+{% block subpage_scripts %}
+<script>
+  const activityPage = document.querySelector(".activity-page");
+  const toastElement = document.getElementById("appToast");
+  const toastUndoActions = document.getElementById("toastUndoActions");
+  const toastUndo = document.getElementById("toastUndo");
+  let toastTimer = null;
+  let activeUndoUrl = null;
+  let activeUndoRow = null;
+
+  function showToast(title, message, undoUrl = null, row = null) {
+    if (!toastElement) return;
+    const toastTitle = document.getElementById("toastTitle");
+    const toastContent = document.getElementById("toastContent");
+    if (toastTitle) toastTitle.textContent = title;
+    if (toastContent) toastContent.textContent = message;
+    activeUndoUrl = undoUrl;
+    activeUndoRow = row;
+    if (toastUndoActions) toastUndoActions.classList.toggle("d-none", !undoUrl || !toastUndo);
+    toastElement.classList.add("toast-visible");
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => {
+      toastElement.classList.remove("toast-visible");
+      activeUndoUrl = null;
+      activeUndoRow = null;
+      if (toastUndoActions) toastUndoActions.classList.add("d-none");
+    }, 4500);
+  }
+
+  const toastClose = document.getElementById("toastClose");
+  if (toastClose) {
+    toastClose.addEventListener("click", () => {
+      window.clearTimeout(toastTimer);
+      if (toastElement) toastElement.classList.remove("toast-visible");
+      activeUndoUrl = null;
+      activeUndoRow = null;
+      if (toastUndoActions) toastUndoActions.classList.add("d-none");
+    });
+  }
+
+  async function readResponse(response) {
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.detail || "The request could not be completed.");
+    }
+    return payload;
+  }
+
+  const activityFilterBar = document.querySelector(".activity-filter-bar");
+  if (activityFilterBar) {
+    const activityRows = [...document.querySelectorAll("#myActivitiesList [data-activity-status]")];
+    const activityFilterEmpty = document.getElementById("activityFilterEmpty");
+    const activityFilterButtons = activityFilterBar.querySelectorAll("[data-filter]");
+
+    activityFilterBar.addEventListener("click", (event) => {
+      const selectedButton = event.target.closest("[data-filter]");
+      if (!selectedButton) return;
+      const selectedFilter = selectedButton.dataset.filter;
+      let visibleCount = 0;
+
+      activityFilterButtons.forEach((button) => {
+        const isActive = button === selectedButton;
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-pressed", String(isActive));
+      });
+      activityRows.forEach((row) => {
+        const isVisible = selectedFilter === "all" || row.dataset.activityStatus === selectedFilter;
+        row.classList.toggle("d-none", !isVisible);
+        if (isVisible) visibleCount += 1;
+      });
+      if (activityFilterEmpty) {
+        activityFilterEmpty.textContent = activityRows.length
+          ? "No activities match this filter."
+          : "No activities submitted yet.";
+        activityFilterEmpty.classList.toggle("d-none", visibleCount > 0);
+      }
+    });
+  }
+
+  const volunteerForm = document.getElementById("volunteerForm");
+  const hoursInput = document.getElementById("hours");
+  if (hoursInput) {
+    hoursInput.addEventListener("input", () => {
+      hoursInput.value = hoursInput.value.replace(/[^0-9]/g, "");
+    });
+  }
+
+  if (volunteerForm) {
+    volunteerForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const result = await readResponse(await fetch("/api/volunteer-submissions", {
+          method: "POST",
+          body: new FormData(volunteerForm),
+        }));
+        volunteerForm.reset();
+        showToast("Submission sent", "Your volunteer activity is waiting for review.",
+          `/api/volunteer-submissions/${result.id}/undo`);
+      } catch (error) {
+        showToast("Submission failed", error.message);
+      }
+    });
+  }
+
+  const submissionList = document.getElementById("submissionList");
+  const pendingCount = document.getElementById("pendingCount");
+  if (submissionList && activityPage.dataset.role === "admin") {
+    submissionList.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-review]");
+      if (!button) return;
+      const row = button.closest("[data-submission-id]");
+      const formData = new FormData();
+      formData.set("decision", button.dataset.review);
+      button.disabled = true;
+      try {
+        const result = await readResponse(await fetch(
+          `/api/volunteer-submissions/${row.dataset.submissionId}/review`,
+          { method: "POST", body: formData },
+        ));
+        const decision = result.status;
+        row.dataset.status = decision;
+        row.classList.add("is-reviewed", "d-none");
+        row.querySelectorAll("[data-review]").forEach((action) => { action.disabled = true; });
+        row.querySelector(".submission-status").textContent = decision === "approved" ? "Accepted" : "Removed";
+        pendingCount.textContent = String(Math.max(0, Number(pendingCount.textContent) - 1));
+        document.getElementById("emptyQueue").classList.toggle("d-none", Number(pendingCount.textContent) > 0);
+        showToast(decision === "approved" ? "Activity accepted" : "Activity removed", "The review was saved.",
+          `/api/volunteer-submissions/${row.dataset.submissionId}/undo`, row);
+      } catch (error) {
+        button.disabled = false;
+        showToast("Review failed", error.message);
+      }
+    });
+  }
+
+  if (toastUndo) toastUndo.addEventListener("click", async () => {
+    if (!activeUndoUrl) return;
+    toastUndo.disabled = true;
+    try {
+      const result = await readResponse(await fetch(activeUndoUrl, { method: "POST" }));
+      if (activeUndoRow && result.status === "pending") {
+        activeUndoRow.dataset.status = "pending";
+        activeUndoRow.classList.remove("is-reviewed", "d-none");
+        activeUndoRow.querySelectorAll("[data-review]").forEach((action) => { action.disabled = false; });
+        activeUndoRow.querySelector(".submission-status").textContent = "Pending review";
+        pendingCount.textContent = String(Number(pendingCount.textContent) + 1);
+        document.getElementById("emptyQueue").classList.add("d-none");
+      }
+      showToast("Undone", result.status === "removed" ? "Submission moved to Removed." : "Review returned to the queue.");
+    } catch (error) {
+      showToast("Undo failed", error.message);
+    } finally {
+      toastUndo.disabled = false;
+    }
+  });
+</script>
+{% endblock %}

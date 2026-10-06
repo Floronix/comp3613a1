@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi import status
+from fastapi import Request
+from fastapi.responses import HTMLResponse
 from app.dependencies.session import SessionDep
-from app.dependencies.auth import AdminDep, IsUserLoggedIn, get_current_user, is_admin
+from app.dependencies.auth import AdminDep
+from app.repositories.volunteer_submission import VolunteerSubmissionRepository
+from app.services.volunteer_submission_service import VolunteerSubmissionService
 from . import router, templates
 
 
@@ -12,10 +13,15 @@ async def admin_home_view(
     user: AdminDep,
     db:SessionDep
 ):
+    service = VolunteerSubmissionService(VolunteerSubmissionRepository(db))
     return templates.TemplateResponse(
-        request=request, 
-        name="admin.html",
+        request=request,
+        name="activity.html",
         context={
-            "user": user
+            "user": user,
+            "view": "admin",
+            "pending_submissions": service.get_pending_submissions(),
+            "my_submissions": [],
+            "approved_hours": 0,
         }
     )
