@@ -54,12 +54,15 @@ class MilestoneRepository:
         progress_target = next_milestone.threshold if next_milestone else 100
         progress_percent = min(100, int(approved_hours * 100 / progress_target)) if progress_target else 100
         earned_milestone_points = sum(record.points_awarded for record in unlocked_records)
-        top_students = ranked_students[:7]
-        student_in_top = any(student["id"] == student_id for student in top_students)
+        top_students = ranked_students[:9]
+        student_in_top_nine = current_student["rank"] <= 9
 
         return {
             "top_students": top_students,
-            "current_student": current_student if not student_in_top else None,
+            "ranked_students": ranked_students,
+            "current_student": current_student,
+            "current_student_in_top_nine": student_in_top_nine,
+            "total_students": len(ranked_students),
             "milestones": [
                 {
                     "id": milestone.id,
@@ -82,12 +85,16 @@ class MilestoneRepository:
     def ensure_milestones(self) -> list[Milestone]:
         milestones = self.db.exec(select(Milestone).order_by(Milestone.threshold)).all()
         existing_thresholds = {milestone.threshold for milestone in milestones}
+        for milestone in milestones:
+            if milestone.badge_icon != "star":
+                milestone.badge_icon = "star"
+                self.db.add(milestone)
         for threshold in MILESTONE_THRESHOLDS:
             if threshold not in existing_thresholds:
                 milestone = Milestone(
                     name=f"{threshold} Hour" if threshold == 1 else f"{threshold} Hours",
                     threshold=threshold,
-                    badge_icon="deployed_code",
+                    badge_icon="star",
                     reward=threshold * 10,
                 )
                 self.db.add(milestone)

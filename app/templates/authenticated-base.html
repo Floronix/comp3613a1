@@ -3,20 +3,25 @@
 {% block internal_css %}
 <style>
     body {
-        overflow-x: hidden;
-        background: var(--brand-bg);
+        overflow-x: clip;
+        background: transparent;
         color: var(--brand-ink);
     }
 
     #wrapper {
         display: flex;
         min-height: 100vh;
+        align-items: flex-start;
     }
 
     #sidebar {
+        position: sticky;
+        top: 0;
+        z-index: 1020;
         min-width: 250px;
         max-width: 250px;
-        min-height: 100vh;
+        height: 100vh;
+        flex-shrink: 0;
         transition: all 0.3s;
         background: var(--brand-sidebar);
         color: #fff;
@@ -51,13 +56,83 @@
         transition: all 0.3s;
         display: flex;
         flex-direction: column;
-        background-color: var(--brand-bg);
+        background: transparent;
         color: var(--brand-ink);
     }
 
     .navbar {
+        position: sticky;
+        top: 0;
+        z-index: 1020;
+        flex-shrink: 0;
         border-bottom: 1px solid #343b36;
         background-color: var(--brand-surface) !important;
+    }
+
+    .sidebar-backdrop {
+        display: none;
+    }
+
+    @media (max-width: 767px) {
+        #wrapper {
+            display: block;
+            width: 100%;
+            min-width: 0;
+        }
+
+        #sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1040;
+            width: min(18rem, 84vw);
+            min-width: 0;
+            max-width: none;
+            height: 100vh;
+            height: 100dvh;
+            transform: translateX(-102%);
+            transition: transform 0.22s ease;
+        }
+
+        #sidebar.mobile-open {
+            transform: translateX(0);
+        }
+
+        #sidebar.collapsed {
+            margin-left: 0;
+            transform: translateX(-102%);
+        }
+
+        .sidebar-backdrop:not([hidden]) {
+            position: fixed;
+            inset: 0;
+            z-index: 1030;
+            display: block;
+            background: rgba(0, 0, 0, 0.64);
+        }
+
+        body.sidebar-open {
+            overflow: hidden;
+        }
+
+        #content {
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
+            padding: 0.5rem;
+            overflow-x: clip;
+        }
+
+        .navbar {
+            width: 100%;
+            min-height: 3.5rem;
+            padding-inline: 0.5rem !important;
+        }
+
+        .navbar .btn {
+            min-width: 44px;
+            min-height: 44px;
+        }
     }
 </style>
 {% block additional_styles %}{% endblock %}
@@ -65,6 +140,7 @@
 
 {% block content %}
 <div id="wrapper">
+    <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
     <nav id="sidebar" class="p-3 d-flex flex-column vh-100">
         <a class="brand-wordmark sidebar-brand" href="{{ url_for('index_view') }}">Student Awards</a>
 
@@ -137,8 +213,36 @@
 </div>
 
 <script>
-    document.getElementById("menu-toggle").addEventListener("click", function () {
-        document.getElementById("sidebar").classList.toggle("collapsed");
+    const sidebar = document.getElementById("sidebar");
+    const menuToggle = document.getElementById("menu-toggle");
+    const sidebarBackdrop = document.getElementById("sidebar-backdrop");
+    const mobileLayout = window.matchMedia("(max-width: 767px)");
+
+    function closeMobileSidebar() {
+        sidebar.classList.remove("mobile-open");
+        sidebarBackdrop.hidden = true;
+        document.body.classList.remove("sidebar-open");
+        menuToggle.setAttribute("aria-expanded", "false");
+    }
+
+    menuToggle.setAttribute("aria-expanded", "false");
+    menuToggle.addEventListener("click", function () {
+        if (mobileLayout.matches) {
+            const isOpen = sidebar.classList.toggle("mobile-open");
+            sidebarBackdrop.hidden = !isOpen;
+            document.body.classList.toggle("sidebar-open", isOpen);
+            menuToggle.setAttribute("aria-expanded", String(isOpen));
+            return;
+        }
+        sidebar.classList.toggle("collapsed");
+    });
+    sidebarBackdrop.addEventListener("click", closeMobileSidebar);
+    window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeMobileSidebar();
+    });
+    mobileLayout.addEventListener("change", () => {
+        sidebar.classList.remove("collapsed", "mobile-open");
+        closeMobileSidebar();
     });
 </script>
 {% block subpage_scripts %}{% endblock %}

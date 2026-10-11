@@ -2,27 +2,36 @@
 {% block title %}Leaderboard | Student Awards{% endblock %}
 
 {% block subpage_content %}
+{% macro rank_marker(rank) %}
+  {% if rank == 1 %}<span class="material-symbols-outlined rank-medal rank-gold" role="img" aria-label="Rank 1">emoji_events</span>
+  {% elif rank == 2 %}<span class="material-symbols-outlined rank-medal rank-silver" role="img" aria-label="Rank 2">workspace_premium</span>
+  {% elif rank == 3 %}<span class="material-symbols-outlined rank-medal rank-bronze" role="img" aria-label="Rank 3">military_tech</span>
+  {% else %}{{ rank }}.{% endif %}
+{% endmacro %}
 <main class="leaderboard-page">
   <section class="leaderboard-frame" aria-labelledby="leaderboard-heading">
     <h1 class="leaderboard-title" id="leaderboard-heading">Leaderboards</h1>
-    <ol class="leaderboard-list" aria-label="Top students by approved volunteer hours">
-      {% for student in top_students %}
-      <li class="leaderboard-row {{ 'is-current' if student.id == user.id else '' }}">
-        <span>{{ student.rank }}.</span>
+    <div class="leaderboard-ranking" id="leaderboardFrame" data-total-students="{{ total_students }}">
+    <ol class="leaderboard-list {{ 'is-windowed' if total_students > 9 }}" id="leaderboardList" aria-label="Students ranked by approved volunteer hours">
+      {% for student in ranked_students %}
+      <li class="leaderboard-row {{ 'is-current' if student.id == user.id else '' }}" id="leaderboard-row-{{ student.id }}" data-student-id="{{ student.id }}" data-rank="{{ student.rank }}">
+        <span class="leaderboard-rank">{{ rank_marker(student.rank) }}</span>
         <span class="leaderboard-name">{{ student.username }}</span>
-        <span class="leaderboard-dots" aria-hidden="true"></span>
         <span class="leaderboard-hours">{{ "%.0f"|format(student.approved_hours) }}</span>
       </li>
       {% endfor %}
-      {% if current_student %}
-      <li class="leaderboard-row leaderboard-current-rank is-current">
-        <span>{{ current_student.rank }}.</span>
-        <span class="leaderboard-name">{{ current_student.username }}</span>
-        <span class="leaderboard-dots" aria-hidden="true"></span>
-        <span class="leaderboard-hours">{{ "%.0f"|format(current_student.approved_hours) }}</span>
-      </li>
-      {% endif %}
     </ol>
+    {% if total_students > 9 and not current_student_in_top_nine %}
+    <div class="leaderboard-row leaderboard-current-rank is-current" id="currentStudentFloat" aria-label="Your current rank">
+        <span class="leaderboard-rank">{{ rank_marker(current_student.rank) }}</span>
+        <span class="leaderboard-name">{{ current_student.username }}</span>
+        <span class="leaderboard-hours">{{ "%.0f"|format(current_student.approved_hours) }}</span>
+    </div>
+    {% endif %}
+    <button class="leaderboard-jump" id="leaderboardJump" type="button" aria-label="Jump to your rank" title="Jump to your rank" hidden>
+      <span class="material-symbols-outlined" id="leaderboardJumpIcon" aria-hidden="true">keyboard_arrow_down</span>
+    </button>
+    </div>
 
     <section class="milestone-panel" aria-labelledby="milestones-heading">
       <h2 id="milestones-heading">Milestones</h2>
@@ -134,6 +143,42 @@
     milestoneReturn.addEventListener("click", () => positionTrack(startingIndex));
   }
 
+  const leaderboardFrame = document.getElementById("leaderboardFrame");
+  const leaderboardList = document.getElementById("leaderboardList");
+  const currentStudentFloat = document.getElementById("currentStudentFloat");
+  const leaderboardJump = document.getElementById("leaderboardJump");
+  const leaderboardJumpIcon = document.getElementById("leaderboardJumpIcon");
+  const currentStudentRow = leaderboardList?.querySelector('[data-student-id="{{ user.id }}"]');
+
+  if (leaderboardFrame && leaderboardList && leaderboardJump && currentStudentRow) {
+    const totalStudents = Number(leaderboardFrame.dataset.totalStudents);
+    const updateLeaderboardJump = () => {
+      const viewport = leaderboardList.getBoundingClientRect();
+      const student = currentStudentRow.getBoundingClientRect();
+      const isVisible = student.bottom > viewport.top && student.top < viewport.bottom;
+      if (currentStudentFloat) currentStudentFloat.hidden = isVisible;
+      if (totalStudents <= 9 || isVisible) {
+        leaderboardJump.hidden = true;
+        return;
+      }
+      const studentIsAbove = student.bottom <= viewport.top;
+      leaderboardJump.hidden = false;
+      leaderboardJump.classList.toggle("is-above", studentIsAbove);
+      leaderboardJumpIcon.textContent = studentIsAbove ? "keyboard_arrow_up" : "keyboard_arrow_down";
+    };
+
+    leaderboardList.classList.toggle("is-windowed", totalStudents > 9);
+    leaderboardList.addEventListener("scroll", updateLeaderboardJump, { passive: true });
+    window.addEventListener("resize", updateLeaderboardJump);
+    leaderboardJump.addEventListener("click", () => {
+      const listBox = leaderboardList.getBoundingClientRect();
+      const rowBox = currentStudentRow.getBoundingClientRect();
+      const targetTop = leaderboardList.scrollTop + rowBox.top - listBox.top;
+      leaderboardList.scrollTo({ top: targetTop, behavior: "smooth" });
+    });
+    requestAnimationFrame(updateLeaderboardJump);
+  }
+
   const leaderboardAwards = {{ new_awards | tojson }};
   const leaderboardToast = document.getElementById("appToast");
   const leaderboardToastClose = document.getElementById("toastClose");
@@ -150,7 +195,19 @@
       const message = document.getElementById("toastContent");
       if (!toast || !title || !message) return;
       title.textContent = `Milestone (${award.threshold}) claimed successfully!`;
-      message.textContent = `You have obtained ${award.points} points.`;
+      const points = document.createElement("span");
+      points.className = "points-inline";
+      points.append(document.createTextNode(String(award.points)));
+      const star = document.createElement("span");
+      star.className = "material-symbols-outlined points-star";
+      star.setAttribute("aria-hidden", "true");
+      star.textContent = "star";
+      points.append(star);
+      message.replaceChildren(
+        document.createTextNode("You have obtained "),
+        points,
+        document.createTextNode("."),
+      );
       toast.classList.add("toast-visible");
       window.clearTimeout(window.leaderboardToastTimer);
       window.leaderboardToastTimer = window.setTimeout(() => {

@@ -12,7 +12,7 @@
   <header class="prizes-heading">
     <h1>PRIZES</h1>
     <div class="prize-balance">
-      Your Points: <span id="pointsBalance">{{ points_balance }}</span>
+      Your Points: <span class="points-inline"><span id="pointsBalance">{{ points_balance }}</span><span class="material-symbols-outlined points-star" aria-hidden="true">star</span></span>
       ({{ "%.0f"|format(approved_hours) }} hours)
     </div>
   </header>
@@ -22,7 +22,7 @@
     <article class="prize-card" data-prize-id="{{ prize.id }}" data-prize-cost="{{ prize.cost }}">
       <div class="prize-details">
         <h2>{{ prize.name }}</h2>
-        <p>Cost: {{ prize.cost }} points</p>
+        <p>Cost: <span class="points-inline">{{ prize.cost }}<span class="material-symbols-outlined points-star" aria-hidden="true">star</span></span></p>
       </div>
       <button class="btn btn-success prize-redeem" type="button" data-redeem
               {% if points_balance < prize.cost %}disabled aria-disabled="true"{% endif %}>
@@ -75,12 +75,30 @@
   const toastElement = document.getElementById("appToast");
   let toastTimer = null;
 
-  function showPrizeToast(title, message) {
+  function showPrizeToast(title, message, pointsValue = null) {
     if (!toastElement) return;
     const toastTitle = document.getElementById("toastTitle");
     const toastContent = document.getElementById("toastContent");
     if (toastTitle) toastTitle.textContent = title;
-    if (toastContent) toastContent.textContent = message;
+    if (toastContent) {
+      if (pointsValue === null) {
+        toastContent.textContent = message;
+      } else {
+        const points = document.createElement("span");
+        points.className = "points-inline";
+        points.append(document.createTextNode(String(pointsValue)));
+        const star = document.createElement("span");
+        star.className = "material-symbols-outlined points-star";
+        star.setAttribute("aria-hidden", "true");
+        star.textContent = "star";
+        points.append(star);
+        toastContent.replaceChildren(
+          document.createTextNode("You have "),
+          points,
+          document.createTextNode(" remaining."),
+        );
+      }
+    }
     toastElement.classList.add("toast-visible");
     window.clearTimeout(toastTimer);
     toastTimer = window.setTimeout(() => toastElement.classList.remove("toast-visible"), 4500);
@@ -127,7 +145,7 @@
           redemptionHistory.append(row);
           redemptionHistory.classList.remove("d-none");
           redemptionEmpty?.classList.add("d-none");
-          showPrizeToast(`${result.prize_name} redeemed`, `You have ${result.points_balance} points remaining.`);
+          showPrizeToast(`${result.prize_name} redeemed`, "", result.points_balance);
         } catch (error) {
           button.disabled = false;
           showPrizeToast("Redemption failed", error.message);
