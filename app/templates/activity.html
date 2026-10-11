@@ -43,19 +43,19 @@
     <button class="activity-filter is-active" type="button" data-filter="all" aria-pressed="true">All</button>
     <button class="activity-filter" type="button" data-filter="pending" aria-pressed="false">Pending</button>
     <button class="activity-filter" type="button" data-filter="accepted" aria-pressed="false">Accepted</button>
-    <button class="activity-filter" type="button" data-filter="removed" aria-pressed="false">Removed</button>
+    <button class="activity-filter" type="button" data-filter="rejected" aria-pressed="false">Rejected</button>
   </div>
   <section class="activity-panel" aria-label="My submitted activities">
     <div class="submission-list" id="myActivitiesList">
       {% for submission in my_submissions %}
-      <article class="submission-row" data-activity-status="{{ 'accepted' if submission.status == 'approved' else 'removed' if submission.status in ['removed', 'rejected'] else 'pending' }}">
+      <article class="submission-row" data-activity-status="{{ 'accepted' if submission.status == 'approved' else 'rejected' if submission.status in ['removed', 'rejected'] else 'pending' }}">
         <div>
           <h3>{{ submission.activity }}</h3>
           <p class="submission-meta">{{ "%.1f"|format(submission.hours) }} hours · {{ submission.submitted_at.strftime("%b %d, %Y") }}</p>
           <p class="submission-description">{{ submission.description }}</p>
         </div>
         <span class="activity-state state-{{ submission.status }}">
-          {% if submission.status == "approved" %}Accepted{% elif submission.status in ["removed", "rejected"] %}Removed{% else %}Pending{% endif %}
+          {% if submission.status == "approved" %}Accepted{% elif submission.status in ["removed", "rejected"] %}Rejected{% else %}Pending{% endif %}
         </span>
       </article>
       {% endfor %}
@@ -221,10 +221,10 @@
         row.dataset.status = decision;
         row.classList.add("is-reviewed", "d-none");
         row.querySelectorAll("[data-review]").forEach((action) => { action.disabled = true; });
-        row.querySelector(".submission-status").textContent = decision === "approved" ? "Accepted" : "Removed";
+        row.querySelector(".submission-status").textContent = decision === "approved" ? "Accepted" : "Rejected";
         pendingCount.textContent = String(Math.max(0, Number(pendingCount.textContent) - 1));
         document.getElementById("emptyQueue").classList.toggle("d-none", Number(pendingCount.textContent) > 0);
-        showToast(decision === "approved" ? "Activity accepted" : "Activity removed", "The review was saved.",
+        showToast(decision === "approved" ? "Activity accepted" : "Activity rejected", "The review was saved.",
           `/api/volunteer-submissions/${row.dataset.submissionId}/undo`, row);
       } catch (error) {
         button.disabled = false;
@@ -246,7 +246,7 @@
         pendingCount.textContent = String(Number(pendingCount.textContent) + 1);
         document.getElementById("emptyQueue").classList.add("d-none");
       }
-      showToast("Undone", result.status === "removed" ? "Submission moved to Removed." : "Review returned to the queue.");
+      showToast("Undone", ["removed", "rejected"].includes(result.status) ? "Submission moved to Rejected." : "Review returned to the queue.");
     } catch (error) {
       showToast("Undo failed", error.message);
     } finally {
